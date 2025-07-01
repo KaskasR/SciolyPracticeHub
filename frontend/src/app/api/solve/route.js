@@ -2,44 +2,50 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-// use your SERVICE_ROLE_KEY here so you can write to the DB
+// Use your Service Role key so you can write to the DB
 const supabase = createClient(
-  process.env.SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
 export async function POST(request) {
   const { slug, solution } = await request.json()
 
-  // fetch the puzzle definition
-  const { data: puzzle } = await supabase
+  // 1) Fetch puzzle definition
+  const { data: puzzle, error: puzzleError } = await supabase
     .from('puzzles')
     .select('id, type, config')
     .eq('slug', slug)
     .single()
 
-  // your own solution-checking logic:
-  const correct = checkSolution(solution, puzzle)
+  if (puzzleError || !puzzle) {
+    return NextResponse.json(
+      { error: puzzleError?.message || 'Puzzle not found' },
+      { status: 400 }
+    )
+  }
 
-  // record the attempt
+  // 2) Check the solution (stubbed for now)
+  let correct = false
+
+  // TODO: replace this with real logic based on puzzle.type/config
+  // e.g. for Caesar cipher: decode solution using puzzle.config.shift
+  // and compare to an expected plaintext stored in your DB or config.
+  // For now we just leave `correct = false`.
+
+  // 3) Record the attempt
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
   await supabase.from('user_progress').insert({
-    user_id:   (await supabase.auth.getUser()).data.user.id,
+    user_id: user.id,
     puzzle_id: puzzle.id,
-    solved:    correct,
-    attempts:  1,
+    solved: correct,
+    attempts: 1,
     last_score: correct ? 1 : 0,
   })
 
+  // 4) Return the result
   return NextResponse.json({ correct })
-}
-
-// example checker — customize per puzzle.type
-function checkSolution(solution, puzzle) {
-  if (puzzle.type === 'cipher') {
-    // for Caesar: shift each letter back
-    const { shift } = puzzle.config
-    // ... implement your logic ...
-    return solution.toUpperCase() === /* expected */;
-  }
-  return false
 }
